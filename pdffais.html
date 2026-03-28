@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>محرر PDF متكامل</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; direction: rtl; }
+#pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.page-box { border: 1px solid #ccc; padding: 10px; width: 150px; cursor: grab; background: #f9f9f9; }
+button { margin: 5px; padding: 10px; }
+</style>
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+
+<h2>محرر PDF متكامل</h2>
+
+<input type="file" id="uploadPdf" accept="application/pdf">
+<br><br>
+
+<button id="addTextBtn">أضف نص</button>
+<button id="addImageBtn">أضف صورة</button>
+<button id="addPageBtn">أضف صفحة جديدة</button>
+<button id="savePdfBtn">حفظ PDF</button>
+
+<div id="pages"></div>
+
+<script>
+let pdfDoc;
+let pageOrder = [];
+
+const pagesContainer = document.getElementById('pages');
+
+document.getElementById('uploadPdf').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const arrayBuffer = await file.arrayBuffer();
+    pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+    pageOrder = pdfDoc.getPages().map((p,i) => i);
+    renderPages();
+    alert('PDF تم تحميله!');
+});
+
+function renderPages() {
+    pagesContainer.innerHTML = '';
+    pageOrder.forEach((i) => {
+        const div = document.createElement('div');
+        div.className = 'page-box';
+        div.draggable = true;
+        div.innerText = `صفحة ${i+1}`;
+        div.dataset.index = i;
+
+        div.addEventListener('dragstart', (ev) => {
+            ev.dataTransfer.setData("text/plain", i);
+        });
+
+        div.addEventListener('dragover', (ev) => ev.preventDefault());
+
+        div.addEventListener('drop', (ev) => {
+            ev.preventDefault();
+            const fromIndex = parseInt(ev.dataTransfer.getData("text/plain"));
+            const toIndex = parseInt(div.dataset.index);
+            const idx = pageOrder.indexOf(fromIndex);
+            pageOrder.splice(idx,1);
+            const insertAt = pageOrder.indexOf(toIndex);
+            pageOrder.splice(insertAt,0,fromIndex);
+            renderPages();
+        });
+
+        pagesContainer.appendChild(div);
+    });
+}
+
+document.getElementById('addTextBtn').addEventListener('click', async () => {
+    if(!pdfDoc) return alert('ارفع ملف PDF أولاً');
+    const page = pdfDoc.getPage(pageOrder[0]);
+    const text = prompt('أدخل النص الذي تريد إضافته:');
+    page.drawText(text, { x: 50, y: 500, size: 20, color: PDFLib.rgb(0,0,1) });
+    alert('تم إضافة النص!');
+});
+
+document.getElementById('addImageBtn').addEventListener('click', async () => {
+    if(!pdfDoc) return alert('ارفع ملف PDF أولاً');
+    const imgInput = document.createElement('input');
+    imgInput.type = 'file';
+    imgInput.accept = 'image/*';
+    imgInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        const arrayBuffer = await file.arrayBuffer();
+        let img;
+        if(file.type === 'image/png'){
+            img = await pdfDoc.embedPng(arrayBuffer);
+        } else {
+            img = await pdfDoc.embedJpg(arrayBuffer);
+        }
+        const page = pdfDoc.getPage(pageOrder[0]);
+        page.drawImage(img, { x: 50, y: 300, width: 200, height: 150 });
+        alert('تم إضافة الصورة!');
+    };
+    imgInput.click();
+});
+
+document.getElementById('addPageBtn').addEventListener('click', async () => {
+    if(!pdfDoc) return alert('ارفع ملف PDF أولاً');
+    pdfDoc.addPage();
+    pageOrder.push(pdfDoc.getPageCount()-1);
+    renderPages();
+    alert('تم إضافة صفحة جديدة!');
+});
+
+document.getElementById('savePdfBtn').addEventListener('click', async () => {
+    if(!pdfDoc) return alert('ارفع ملف PDF أولاً');
+    // إعادة ترتيب الصفحات
+    const newPdf = await PDFLib.PDFDocument.create();
+    for(let i=0;i<pageOrder.length;i++){
+        const [copiedPage] = await newPdf.copyPages(pdfDoc, [pageOrder[i]]);
+        newPdf.addPage(copiedPage);
+    }
+    const pdfBytes = await newPdf.save();
+    const blob = new Blob([pdfBytes], {type: 'application/pdf'});
+    saveAs(blob, 'Edited.pdf');
+});
+</script>
+
+
+</body></html>
